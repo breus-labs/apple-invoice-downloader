@@ -64,7 +64,7 @@ node apple-invoice-downloader-v2.js
 2. 🔐 **Du loggst dich manuell bei Apple ein** (inkl. 2FA)
 3. ⏳ Script wartet automatisch bis Kaufhistorie sichtbar ist
 4. 🔄 Wechselt zu "Alle" (falls Family Account)
-5. ⏬ Scrollt durch Liste bis Einträge aus 2024 erscheinen
+5. ⏬ Scrollt durch Liste bis Einträge aus dem letzten Jahr erscheinen
 6. 📋 Sammelt alle Bestellnummern mit Belegen
 7. 📥 Lädt alle Rechnungen als PDF herunter
 
