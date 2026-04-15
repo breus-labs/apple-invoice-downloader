@@ -36,9 +36,12 @@ function parseGermanDate(dateStr) {
   return dateStr.replace(/[.\s]/g, '-');
 }
 
-async function main() {
+async function main(targetYear) {
   console.log('🍎 Apple Invoice Downloader v2\n');
   console.log('═══════════════════════════════════════\n');
+  if (targetYear) {
+    console.log(`🎯 Ziel-Jahr: ${targetYear}\n`);
+  }
   
   const browser = await chromium.launch({ 
     headless: false,
@@ -106,34 +109,37 @@ async function main() {
     
     // SCHRITT 1: Alle Bestellungen sammeln (mit Infinite Scroll)
     console.log('📋 Sammle alle Bestellungen...\n');
-    
-    // Erst scrollen um alle relevanten Einträge zu laden
-    const currentYear = new Date().getFullYear();
-    const lastYear = currentYear - 1;
-    
-    console.log(`⏬ Scrolle bis Einträge aus ${lastYear} sichtbar sind...`);
+
+    // Scrollen: wenn targetYear gesetzt, bis Einträge aus dem Jahr davor sichtbar sind
+    // (damit wir sicher alle targetYear-Einträge erfasst haben).
+    // Ohne targetYear: Verhalten wie zuvor (stoppt bei currentYear - 1).
+    const stopYear = targetYear
+      ? targetYear - 1
+      : new Date().getFullYear() - 1;
+
+    console.log(`⏬ Scrolle bis Einträge aus ${stopYear} sichtbar sind${targetYear ? ` (um alles aus ${targetYear} zu erfassen)` : ''}...`);
     let previousCount = 0;
     let currentCount = 0;
     let scrollAttempts = 0;
     const maxScrollAttempts = 50;
-    let hasLastYearEntries = false;
-    
-    while (scrollAttempts < maxScrollAttempts && !hasLastYearEntries) {
+    let hasStopYearEntries = false;
+
+    while (scrollAttempts < maxScrollAttempts && !hasStopYearEntries) {
       // Aktuelle Anzahl zählen
       currentCount = await page.locator('button[data-auto-test-id="RAP2.PurchaseList.PurchaseHeader.Button.ToggleDisclosure"]').count();
-      
-      // Prüfe ob wir schon Einträge aus letztem Jahr haben
+
+      // Prüfe ob wir schon Einträge aus Stop-Jahr haben
       const allButtons = await page.locator('button[data-auto-test-id="RAP2.PurchaseList.PurchaseHeader.Button.ToggleDisclosure"]').all();
       for (const btn of allButtons) {
         const text = await btn.textContent();
-        if (text.includes(String(lastYear))) {
-          hasLastYearEntries = true;
+        if (text.includes(String(stopYear))) {
+          hasStopYearEntries = true;
           break;
         }
       }
-      
-      if (hasLastYearEntries) {
-        console.log(`✅ Einträge aus ${lastYear} gefunden (${currentCount} Käufe geladen)\n`);
+
+      if (hasStopYearEntries) {
+        console.log(`✅ Einträge aus ${stopYear} gefunden (${currentCount} Käufe geladen)\n`);
         break;
       }
       
@@ -147,7 +153,7 @@ async function main() {
       
       // Wenn keine neuen Einträge, sind wir am Ende
       if (currentCount === previousCount) {
-        console.log(`✅ Ende der Liste erreicht (${currentCount} Käufe, kein ${lastYear} gefunden)\n`);
+        console.log(`✅ Ende der Liste erreicht (${currentCount} Käufe, kein ${stopYear} gefunden)\n`);
         break;
       }
       
@@ -183,7 +189,13 @@ async function main() {
           const orderId = orderIdMatch[1];
           const date = dateMatch ? parseGermanDate(dateMatch[1]) : 'unknown';
           const amount = amountMatch ? amountMatch[1].replace(',', '.') : 'unknown';
-          
+
+          // Jahresfilter: nur wenn targetYear gesetzt ist
+          if (targetYear && !date.startsWith(String(targetYear))) {
+            console.log(`↷ ${date} - ${orderId} (übersprungen, nicht ${targetYear})`);
+            continue;
+          }
+
           // Prüfen ob dieser Button bereits expanded ist
           const ariaExpanded = await button.getAttribute('aria-expanded');
           
@@ -466,7 +478,14 @@ if (args.includes('--help') || args.includes('-h')) {
 ═══════════════════════════════════════
 
 VERWENDUNG:
-  node apple-invoice-downloader-v2.js
+  node apple-invoice-downloader-v2.js [--year YYYY]
+
+OPTIONEN:
+  --year YYYY    Nur Rechnungen aus dem angegebenen Jahr laden
+                 (Standard: ohne Filter – alle geladenen Einträge)
+
+BEISPIEL:
+  node apple-invoice-downloader-v2.js --year 2024
 
 UNTERSCHIED ZU V1:
   - Sammelt ERST alle Bestellnummern
@@ -479,8 +498,21 @@ UNTERSCHIED ZU V1:
   process.exit(0);
 }
 
+// --year parsen (optional – ohne Flag kein Filter)
+let targetYear = null;
+const yearIdx = args.indexOf('--year');
+if (yearIdx !== -1 && args[yearIdx + 1]) {
+  const parsed = parseInt(args[yearIdx + 1], 10);
+  if (!Number.isNaN(parsed) && parsed >= 2000 && parsed <= 2100) {
+    targetYear = parsed;
+  } else {
+    console.error(`❌ Ungültiges Jahr: ${args[yearIdx + 1]}`);
+    process.exit(1);
+  }
+}
+
 // Start
 console.log('Starte in 2 Sekunden...\n');
 setTimeout(() => {
-  main().catch(console.error);
+  main(targetYear).catch(console.error);
 }, 2000);
